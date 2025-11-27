@@ -1,0 +1,32 @@
+---
+title: "Soil preservation scores mapped to SGDBE"
+format: html
+editor: visual
+---
+
+Here we follow Kibblewhite et al 2015 and redo their steps to connect their soil preservation scores derived from soil type to the STUs of the SGDBE
+
+They write:
+"SGDBE consists of (1) a geometric dataset at scale 1:1,000,000 and (2) a semantic dataset containing attribute files. The geometrical com-
+ponent of the database are polygons that form soil mapping units (SMUs) (EC, 2003). SMUs contain one or more STUs that form a discrete
+landscape unit with shared characteristics. The semantic dataset of the SGDBE describe the soil types present within the SMU and the percent-
+age of the SMU area occupied by each STU present within it. Thus multiple attribute values are linked to the polygons of the geometrical
+dataset. We assigned the appropriate preservation numeric score to each STU in each SMU and calculated the spatially weighted mean of
+these scores for each SMU. Areas of artificial surfaces, permanent ice or snow cover and water bodies were excluded from the analysis. We
+then mapped the mean scores for the SMUs across the European Union after assigning colours to a continuous scale of mean preservation
+score. The percentage areas of soil across the European Union that provide good (highest third of scale), fair and poor (lowest third of scale)
+preservation capacities for bones, teeth and shells; organic materials; and metals (Cu, bronze and Fe) were then calculated. "
+
+-> therefore we will
+1. get the STUs downloaded from SGDBE
+2. connect STU to soil preservation scores depending on soil types
+3. save file
+4. add STU to SMU via percentage of soil type
+5. save file
+
+6. take administrative boundaries dataset and cut SMUs to different levels of admin unit
+7. calculate percentage of SMU per area of administrative unit
+8. for LAU level: only keep the largest value 
+9. for NUTS levels: keep percentages of preservation scores per admin unit 
+
+
