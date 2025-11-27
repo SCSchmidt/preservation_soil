@@ -30,3 +30,4 @@ preservation capacities for bones, teeth and shells; organic materials; and meta
 9. for NUTS levels: keep percentages of preservation scores per admin unit 
 
 
+<!-- for russia and EURASIA see: https://docs.isric.org/soil-geographic-databases/sections/soil-geographic-databases-asia-eurasia.html#eurasia --> 
