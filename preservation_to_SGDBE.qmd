@@ -7,15 +7,8 @@ editor: visual
 Here we follow Kibblewhite et al 2015 and redo their steps to connect their soil preservation scores derived from soil type to the STUs of the SGDBE
 
 They write:
-"SGDBE consists of (1) a geometric dataset at scale 1:1,000,000 and (2) a semantic dataset containing attribute files. The geometrical com-
-ponent of the database are polygons that form soil mapping units (SMUs) (EC, 2003). SMUs contain one or more STUs that form a discrete
-landscape unit with shared characteristics. The semantic dataset of the SGDBE describe the soil types present within the SMU and the percent-
-age of the SMU area occupied by each STU present within it. Thus multiple attribute values are linked to the polygons of the geometrical
-dataset. We assigned the appropriate preservation numeric score to each STU in each SMU and calculated the spatially weighted mean of
-these scores for each SMU. Areas of artificial surfaces, permanent ice or snow cover and water bodies were excluded from the analysis. We
-then mapped the mean scores for the SMUs across the European Union after assigning colours to a continuous scale of mean preservation
-score. The percentage areas of soil across the European Union that provide good (highest third of scale), fair and poor (lowest third of scale)
-preservation capacities for bones, teeth and shells; organic materials; and metals (Cu, bronze and Fe) were then calculated. "
+"SGDBE consists of (1) a geometric dataset at scale 1:1,000,000 and (2) a semantic dataset containing attribute files. The geometrical component of the database are polygons that form soil mapping units (SMUs) (EC, 2003). SMUs contain one or more STUs that form a discrete
+landscape unit with shared characteristics. The semantic dataset of the SGDBE describe the soil types present within the SMU and the percentage of the SMU area occupied by each STU present within it. Thus multiple attribute values are linked to the polygons of the geometrical dataset. *We assigned the appropriate preservation numeric score to each STU in each SMU and calculated the spatially weighted mean of these scores for each SMU*. Areas of artificial surfaces, permanent ice or snow cover and water bodies were excluded from the analysis. We then mapped the mean scores for the SMUs across the European Union after assigning colours to a continuous scale of mean preservation score. The percentage areas of soil across the European Union that provide good (highest third of scale), fair and poor (lowest third of scale) preservation capacities for bones, teeth and shells; organic materials; and metals (Cu, bronze and Fe) were then calculated. "
 
 -> therefore we will
 1. get the STUs downloaded from SGDBE
@@ -23,7 +16,6 @@ preservation capacities for bones, teeth and shells; organic materials; and meta
 3. save file
 4. add STU to SMU via percentage of soil type
 5. save file
-
 6. take administrative boundaries dataset and cut SMUs to different levels of admin unit
 7. calculate percentage of SMU per area of administrative unit
 8. for LAU level: only keep the largest value 
@@ -31,3 +23,134 @@ preservation capacities for bones, teeth and shells; organic materials; and meta
 
 
 <!-- for russia and EURASIA see: https://docs.isric.org/soil-geographic-databases/sections/soil-geographic-databases-asia-eurasia.html#eurasia --> 
+
+
+## 1. data has been downloaded
+
+## 2. connect STU to soil preservation scores depending on soil types
+
+```{r}
+#install.packages("foreign") to read dbf files
+
+library(foreign)
+dis <- read.dbf("/media/sophie/Data/ESTER_Nextcloud/Daten/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/stu_sgdbe.dbf", as.is = F)
+
+stuorg <- read.dbf("/media/sophie/Data/ESTER_Nextcloud/Daten/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/stuorg.dbf", as.is = F)
+
+smu <- read.dbf("/media/sophie/Data/ESTER_Nextcloud/Daten/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/smu_sgdbe.dbf", as.is = F)
+
+
+wrbfu_values <- unique(dis$WRBFU) # sollte die WRBFU - Klassifizierung sein
+
+library(stringr)
+
+wrbfu_NAvalues <- wrbfu_values[str_detect(wrbfu_values, pattern = "^[0-9]+")]
+#wrbfu_NAvalues <- as.character(wrbfu_NAvalues)
+
+
+wrbfu_values_class <- as.data.frame(wrbfu_values)
+
+wrbfu_values_class <- wrbfu_values_class |>
+  filter(!wrbfu_values %in% wrbfu_NAvalues)
+
+wrbfu_values_class2 <- tidyr::extract(wrbfu_values_class, wrbfu_values, c("ref_group", "sub_group"), "([A-Z\\s]+)([a-z]+)")
+
+# The European Soil Databases (ESDB), distribution version v2.0 is freely available to the public after user registration. Please note that the spatial data are in vector format.
+##  year 2004 -> documentation 
+
+## get information from documentation
+
+
+library(tabulapdf)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(purrr)
+library(janitor)
+library(stringr)
+
+
+pdf_file <- "./pdf_data/WRB_2007_deutsche_Ausgabe_Böden.pdf" # load PDF of German WRB 2006
+
+# get_page_dims(pdf_file) # dimensions to get an idea of page size ->  595 842
+
+## page 141
+
+# region as a vector containing the top, left, bottom and right coordinates
+
+## reference groups
+region <- c(170, 0, 250, 595)
+
+tab <- extract_tables(pdf_file, 
+               pages = 141,
+               guess = FALSE,
+               col_names = F,
+               method = "stream",
+               area = list(region) 
+               )[[1]]
+
+
+ref_groups <- data.frame(data.table::rbindlist(list(tab[,1:2],tab[,3:4], tab[,5:6], tab[,7:8])))
+
+
+
+## qualifier
+region <- c(260, 0, 690, 595)
+
+tab2 <- extract_tables(pdf_file, 
+               pages = 141,
+               guess = FALSE,
+               col_names = F,
+               method = "stream",
+               area = list(region) 
+               )[[1]]
+
+
+qualifier <- data.frame(data.table::rbindlist(list(tab2[,1:2],tab2[,3:4], tab2[,5:6], tab2[,7:8])))
+
+qualifier <- qualifier |>
+  filter(!is.na(X1))
+
+all_groups <- cross_join(ref_groups, qualifier) # this is hypothetical, I know
+
+all_groups <- all_groups |>
+  mutate(name = paste(X1.y, X1.x),
+         short = paste0(X2.x, X2.y))
+
+all_groups$match <- tolower(all_groups$name)
+```
+
+
+```{r}
+
+load("./data/appendix_kibblewhite_etal_2015_A+B.RData")
+
+appendix$match <- tolower(appendix$`Name in WRB 2006`)
+## uses 'name in WRB 2006'
+
+```
+
+```{r}
+
+match <- left_join(appendix, all_groups)
+
+# a few records don't match, but all in all this worked fine
+```
+
+## 3. save
+
+```{r}
+save(match, file = "./data/soil_WRB_classification_preservation_scores.RData")
+```
+
+
+## next step would be to map the STUs to SMU
+
+4. add STU to SMU via percentage of soil type
+5. save file
+6. take administrative boundaries dataset and cut SMUs to different levels of admin unit
+7. calculate percentage of SMU per area of administrative unit
+8. for LAU level: only keep the largest value 
+9. for NUTS levels: keep percentages of preservation scores per admin unit 
+
+
