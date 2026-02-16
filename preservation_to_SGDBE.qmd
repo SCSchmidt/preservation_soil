@@ -1,31 +1,165 @@
 ---
 title: "Soil preservation scores mapped to SGDBE"
 format: html
-editor: visual
 ---
 
-Here we follow Kibblewhite et al 2015 and redo their steps to connect their soil preservation scores derived from soil type to the STUs of the SGDBE
+Here we follow Kibblewhite et al 2015 and redo their steps to connect their soil preservation scores derived from soil type to the STUs of the SGDBE.
 
-They write:
-"SGDBE consists of (1) a geometric dataset at scale 1:1,000,000 and (2) a semantic dataset containing attribute files. The geometrical component of the database are polygons that form soil mapping units (SMUs) (EC, 2003). SMUs contain one or more STUs that form a discrete
-landscape unit with shared characteristics. The semantic dataset of the SGDBE describe the soil types present within the SMU and the percentage of the SMU area occupied by each STU present within it. Thus multiple attribute values are linked to the polygons of the geometrical dataset. *We assigned the appropriate preservation numeric score to each STU in each SMU and calculated the spatially weighted mean of these scores for each SMU*. Areas of artificial surfaces, permanent ice or snow cover and water bodies were excluded from the analysis. We then mapped the mean scores for the SMUs across the European Union after assigning colours to a continuous scale of mean preservation score. The percentage areas of soil across the European Union that provide good (highest third of scale), fair and poor (lowest third of scale) preservation capacities for bones, teeth and shells; organic materials; and metals (Cu, bronze and Fe) were then calculated. "
+They write: "SGDBE consists of (1) a geometric dataset at scale 1:1,000,000 and (2) a semantic dataset containing attribute files. The geometrical component of the database are polygons that form soil mapping units (SMUs) (EC, 2003). SMUs contain one or more STUs that form a discrete landscape unit with shared characteristics. The semantic dataset of the SGDBE describe the soil types present within the SMU and the percentage of the SMU area occupied by each STU present within it. Thus multiple attribute values are linked to the polygons of the geometrical dataset. *We assigned the appropriate preservation numeric score to each STU in each SMU and calculated the spatially weighted mean of these scores for each SMU*. Areas of artificial surfaces, permanent ice or snow cover and water bodies were excluded from the analysis. We then mapped the mean scores for the SMUs across the European Union after assigning colours to a continuous scale of mean preservation score. The percentage areas of soil across the European Union that provide good (highest third of scale), fair and poor (lowest third of scale) preservation capacities for bones, teeth and shells; organic materials; and metals (Cu, bronze and Fe) were then calculated. "
 
--> therefore we will
-1. get the STUs downloaded from SGDBE
-2. connect STU to soil preservation scores depending on soil types
-3. save file
-4. add STU to SMU via percentage of soil type
-5. save file
-6. take administrative boundaries dataset and cut SMUs to different levels of admin unit
-7. calculate percentage of SMU per area of administrative unit
+-\> therefore we will 
+1. get the STUs downloaded from SGDBE 
+2. connect STU to soil preservation scores depending on soil types 
+3. save file 
+4. add STU to SMU via percentage of soil type 
+5. save file 
+6. take administrative boundaries dataset and cut SMUs to different levels of admin unit 
+7. calculate percentage of SMU per area of administrative unit 
 8. for LAU level: only keep the largest value 
-9. for NUTS levels: keep percentages of preservation scores per admin unit 
+9. for NUTS levels: keep percentages of preservation scores per admin unit
+
+<!-- for russia and EURASIA see: https://docs.isric.org/soil-geographic-databases/sections/soil-geographic-databases-asia-eurasia.html#eurasia -->
+
+## 1. already published data has been downloaded
+
+already published for the EU under: Kibblewhite M., Tóth G. and Hermann T. 2015 . "Maps of preservation capacity of cultural artefacts and buried materials in soils in the EU", dataset/maps downloaded from the European Soil Data Centre, esdac.jrc.ec.europa.eu.
+
+Kibblewhite et al 2015, 252:
+Numeric values were assigned to each preservation category (poor = 1, fair =
+2, good = 3). These values were assigned by relating the STU descrip-
+tion (e.g., soil profile, diagnostic horizons and soil properties) to soil
+properties that drive material destruction (e.g., hydrology and associat-
+ed redox conditions, pH, base saturation, soil organic matter content,
+chloride levels)
+
+```{r}
+kw_scores <- read_sf(dsn = "./geodata/SF_cultural/SF_cultural.shp") # percentage, soil ID and preservation scores
+```
 
 
-<!-- for russia and EURASIA see: https://docs.isric.org/soil-geographic-databases/sections/soil-geographic-databases-asia-eurasia.html#eurasia --> 
+```{r}
+load("./geodata/ne_map_ESTER.RData")
 
 
-## 1. data has been downloaded
+kw_scores_4326 <- st_transform(kw_scores, crs = 4326)
+
+kw_scores_4326$SOIL_ID[!st_is_valid(kw_scores)] # several units don't seem to be valid
+
+kw_scores_4326 <- kw_scores_4326 |> filter(SOIL_ID > 0)
+kw_scores_4326 <- st_make_valid(kw_scores_4326)
+
+
+bbox <- st_bbox(ne_map_ESTER)
+bbox <- st_as_sfc(bbox)
+
+#sf_use_s2(FALSE) needs to be run once, there's a bug, see https://github.com/r-spatial/sf/issues/1762 
+
+kw_scores_ESTER <- st_intersection(kw_scores_4326, ne_map_ESTER)
+
+```
+
+
+## Bone preservation
+```{r}
+
+# poor = 1, fair = 2, good = 3
+
+## scale to our system from 0 (no bias = good) to -3
+### first scale to 0 to 3 and add minus after
+
+# formula is y = new min + (x - old min)(new max - new min) / (old max - old min)
+# new max is 0 , new min is -3, old min is 1, old max is 3
+
+#y = -3 + (x - 1)(0 - (-3) / (3 - 1)
+
+# -3 + (x-1)*3/2
+
+kw_scores_ESTER$bones[kw_scores$bones == 0] <- NA
+
+kw_scores_ESTER$score_bones_new <- (-3 + (kw_scores$bones - 1) * 3/2)
+
+```
+
+
+
+```{r}
+library(ggplot2)
+library(ggspatial)
+library(viridis)
+
+ggplot()+
+  geom_sf(data = ne_map_ESTER)+
+  geom_sf(data = kw_scores_ESTER, aes(fill = score_bones_new, colour = score_bones_new))+
+ coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
+           ylim = st_coordinates(bbox)[c(2,3),2])  + # min & max of y values
+    scale_fill_viridis(option = "turbo")+
+  scale_colour_viridis(option = "turbo") +
+  theme_minimal() +
+  labs(fill ="",
+       colour ="",
+       title = "Bias for preservation of bone, shell etc.",
+       caption = "weighted mean, based on Kibblewhite et al. 2015")
+
+ggsave("./maps/preservation_bones.png", dpi = 300)
+```
+
+## Metals
+
+
+
+```{r}
+
+kw_scores_ESTER$metals[kw_scores_ESTER$metals == 0] <- NA
+
+kw_scores_ESTER$score_metals_new <- (-3 + (kw_scores_ESTER$metals - 1) * 3/2)
+
+ggplot()+
+  geom_sf(data = ne_map_ESTER)+
+  geom_sf(data = kw_scores_ESTER, aes(fill = score_metals_new, colour = score_metals_new))+
+ coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
+           ylim = st_coordinates(bbox)[c(2,3),2])  + # min & max of y values
+    scale_fill_viridis(option = "turbo")+
+  scale_colour_viridis(option = "turbo") +
+  theme_minimal() +
+  labs(fill ="",
+       colour ="",
+       title = "Bias for preservation of metals",
+       caption = "weighted mean, based on Kibblewhite et al. 2015")
+
+ggsave("./maps/preservation_metals.png", dpi = 300)
+```
+
+## Metals
+
+
+
+```{r}
+
+kw_scores_ESTER$organics[kw_scores_ESTER$organics == 0] <- NA
+
+kw_scores_ESTER$score_organics_new <- (-3 + (kw_scores_ESTER$organics - 1) * 3/2)
+
+ggplot()+
+  geom_sf(data = ne_map_ESTER)+
+  geom_sf(data = kw_scores_ESTER, aes(fill = score_organics_new, colour = score_organics_new))+
+ coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
+           ylim = st_coordinates(bbox)[c(2,3),2])  + # min & max of y values
+    scale_fill_viridis(option = "turbo")+
+  scale_colour_viridis(option = "turbo") +
+  theme_minimal() +
+  labs(fill ="",
+       colour ="",
+       title = "Bias for preservation of organics",
+       caption = "weighted mean, based on Kibblewhite et al. 2015")
+
+ggsave("./maps/preservation_organics.png", dpi = 300)
+```
+
+
+
+... BUT: 
+- missing Switzerland, Russia and other non-EU-areas, that have been mapped in the SGDBE
+
 
 ## 2. connect STU to soil preservation scores depending on soil types
 
@@ -54,7 +188,10 @@ wrbfu_values_class <- wrbfu_values_class |>
   filter(!wrbfu_values %in% wrbfu_NAvalues)
 
 wrbfu_values_class2 <- tidyr::extract(wrbfu_values_class, wrbfu_values, c("ref_group", "sub_group"), "([A-Z\\s]+)([a-z]+)")
+```
 
+
+```{r}
 # The European Soil Databases (ESDB), distribution version v2.0 is freely available to the public after user registration. Please note that the spatial data are in vector format.
 ##  year 2004 -> documentation 
 
@@ -113,20 +250,21 @@ qualifier <- qualifier |>
 
 all_groups <- cross_join(ref_groups, qualifier) # this is hypothetical, I know
 
+#all_groups$X1.x[all_groups$X1.x == "Leptsol"] <- "Leptosol"
+
 all_groups <- all_groups |>
   mutate(name = paste(X1.y, X1.x),
-         short = paste0(X2.x, X2.y))
+         short = paste0(X2.x, X2.y)) 
 
 all_groups$match <- tolower(all_groups$name)
 ```
-
 
 ```{r}
 
 load("./data/appendix_kibblewhite_etal_2015_A+B.RData")
 
-appendix$match <- tolower(appendix$`Name in WRB 2006`)
-## uses 'name in WRB 2006'
+appendix$match <- tolower(appendix$`Name in WRB 1998`)
+## but WRB 1998 seems to be a better match for soils in SGDBE
 
 ```
 
@@ -140,17 +278,140 @@ match <- left_join(appendix, all_groups)
 ## 3. save
 
 ```{r}
-save(match, file = "./data/soil_WRB_classification_preservation_scores.RData")
+save(match, file = "./data/soil_WRB_classification_preservation_scores_1998.RData")
+```
+
+```{r}
+## fill in missing values in "short" by hand and use 1998 classification -> seems to be more differentiated?
+
+match_filled <- match |>
+  mutate(short = case_when(
+    is.na(short) & match == "anthrosol" ~ "AN",
+    is.na(short) & `Name in WRB 1998` == "Histosol" ~ "HS",
+    is.na(short) & `Name in WRB 1998` == "Chernozem" ~ "CH",
+    is.na(short)  &`Name in WRB 1998` == "Haplic Leptsol"  ~ "LPha",
+    TRUE ~ short) )
+
+## in two cases (ARha and ARpr) climate and wetness can differ -> merged to be only one row
+
+match_filled <- match_filled |>
+  mutate(Wetness = case_when(
+    short == "ARha" ~ "Dry/Moist",
+    short == "ARpr" ~ "Dry/Moist",
+    TRUE ~ Wetness),
+    TypicalClimate = case_when(
+      short == "ARha"~ "Dry/Moist",
+      short == "ARpr" ~ "Dry/Moist",
+      TRUE ~ TypicalClimate  )) |>
+  unique()
+
+save(match_filled, file = "./data/soil_WRB_classification_preservation_scores.RData")
+
+## possibly Kibblewhite et al actually used WRB 1998 ?
+
+
+
 ```
 
 
-## next step would be to map the STUs to SMU
+## next step would be to map the STUs to SMU 
 
-4. add STU to SMU via percentage of soil type
-5. save file
-6. take administrative boundaries dataset and cut SMUs to different levels of admin unit
-7. calculate percentage of SMU per area of administrative unit
-8. for LAU level: only keep the largest value 
-9. for NUTS levels: keep percentages of preservation scores per admin unit 
+4.  add Kibblewhite infos to STU 
+
+```{r}
+load("./data/soil_WRB_classification_preservation_scores.RData")
+
+library(sf)
+
+stuorg <- read_sf(dsn = "./geodata/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/stuorg.dbf") # STU ID to SMU ID with percentage of area
+
+stu_sgdbe <- read_sf(dsn = "./geodata/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/stu_sgdbe.dbf") # STU with all infos (also WRBFU)
+country <- read_sf(dsn = "./geodata/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/country.shp")
+
+sgdbe4_0 <- read_sf(dsn = "./geodata/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/sgdbe4_0.shp") # DOM STU and its percentage per SMU
+```
+
+```{r}
+## check for missing information
+
+list_WRBFU_stu <- unique(stu_sgdbe$WRBFU)
+list_WRBFU_kw <- unique(match_filled$short)
+
+missing_wrb_in_kw <- list_WRBFU_stu[!(list_WRBFU_stu %in% list_WRBFU_kw)] # 38 missing soil types in Kibblewhite's dataset :-( 
+
+missing_wrb_in_stu <- list_WRBFU_stu[!(list_WRBFU_kw %in% list_WRBFU_stu)] # only 8, also not as important
+```
+
+```{r}
+stu_kw <- left_join(stu_sgdbe, match_filled, by = c("WRBFU" = "short"))
+
+## scores by Kibblewhite et al so far only character, needs to be factor:
+
+stu_kw$`Bones etc.` <- factor(stu_kw$`Bones etc.`, ordered = T,
+                              levels = c("Good", "Fair", "Poor"))
 
 
+stu_kw$Organics <- factor(stu_kw$Organics, ordered = T,
+                              levels = c("Good", "Fair", "Poor"))
+
+stu_kw$Metals <- factor(stu_kw$Metals, ordered = T,
+                              levels = c("Good", "Fair", "Poor"))
+
+stu_kw$Stratigraphy <- factor(stu_kw$Stratigraphy, ordered = T,
+                              levels = c("Good", "Fair", "Poor"))
+
+save(stu_kw, file = "./data/STU_preservation_scores.RData")
+
+```
+
+5. to SMU via percentage of soil type (weighted mean) ... or connect SMU to match via soil type?
+
+```{r}
+
+stu_smu <- left_join(stuorg, stu_kw, by = "STU")
+
+
+stu_smu_b <- stu_smu |>
+  group_by(SMU) |>
+  mutate(score_bones = 
+           sum(PCAREA * as.numeric(`Bones etc.`) / 100)) |>
+  select(SMU, score_bones) |>
+  unique()
+
+smu_map <- left_join(sgdbe4_0, stu_smu_b)
+
+smu_map$score_bones <- as.numeric(smu_map$score_bones ) 
+
+## scale to our system from 0 (no bias = good) to -3
+### first scale to 0 to 3 and add minus after
+
+# formula is y = new min + (x - old min)(new max - new min) / (old max - old min)
+# new min is 0 , new max is 3, old min is 1, old max is 3
+## ergo: y = (x-1) (3-0)/(3-1) = (x-1)*3/2
+
+smu_map$score_bones_new <- -((smu_map$score_bones-1)*3/2)
+
+```
+
+```{r}
+library(ggplot2)
+library(ggspatial)
+
+ggplot()+
+  geom_sf(data = smu_map, aes(fill = score_bones_new, colour = score_bones_new))+
+ # coord_sf(xlim = c(-10, 40), ylim = c(35, 65)) +
+#  scale_fill_brewer(palette = "YlGnBu") +
+  theme_minimal() +
+  guides(fill = guide_legend(title = ""),
+         colour = guide_legend(title = "") )+
+  theme(legend.position.inside = c(0.9, 0.9), 
+        plot.background = element_rect(fill = "white", color = NA))
+```
+
+...
+
+5.  save file
+6.  take administrative boundaries dataset and cut SMUs to different levels of admin unit
+7.  calculate percentage of SMU per area of administrative unit
+8.  for LAU level: only keep the largest value
+9.  for NUTS levels: keep percentages of preservation scores per admin unit
