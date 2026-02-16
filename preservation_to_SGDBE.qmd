@@ -33,6 +33,9 @@ ed redox conditions, pH, base saturation, soil organic matter content,
 chloride levels)
 
 ```{r}
+
+library(sf)
+
 kw_scores <- read_sf(dsn = "./geodata/SF_cultural/SF_cultural.shp") # percentage, soil ID and preservation scores
 ```
 
@@ -40,19 +43,26 @@ kw_scores <- read_sf(dsn = "./geodata/SF_cultural/SF_cultural.shp") # percentage
 ```{r}
 load("./geodata/ne_map_ESTER.RData")
 
+ne_map <- read_sf(dsn = "./geodata/ne_10m_admin_1_states_provinces.shp") # world background map
+```
+
+
+```{r}
+library(dplyr)
 
 kw_scores_4326 <- st_transform(kw_scores, crs = 4326)
 
 kw_scores_4326$SOIL_ID[!st_is_valid(kw_scores)] # several units don't seem to be valid
 
 kw_scores_4326 <- kw_scores_4326 |> filter(SOIL_ID > 0)
+
 kw_scores_4326 <- st_make_valid(kw_scores_4326)
 
 
 bbox <- st_bbox(ne_map_ESTER)
 bbox <- st_as_sfc(bbox)
 
-#sf_use_s2(FALSE) needs to be run once, there's a bug, see https://github.com/r-spatial/sf/issues/1762 
+sf_use_s2(FALSE) # needs to be run once, there's a bug, see https://github.com/r-spatial/sf/issues/1762 
 
 kw_scores_ESTER <- st_intersection(kw_scores_4326, ne_map_ESTER)
 
@@ -74,9 +84,9 @@ kw_scores_ESTER <- st_intersection(kw_scores_4326, ne_map_ESTER)
 
 # -3 + (x-1)*3/2
 
-kw_scores_ESTER$bones[kw_scores$bones == 0] <- NA
+kw_scores_ESTER$bones[kw_scores_ESTER$bones == 0] <- NA
 
-kw_scores_ESTER$score_bones_new <- (-3 + (kw_scores$bones - 1) * 3/2)
+kw_scores_ESTER$score_bones_new <- (-3 + (kw_scores_ESTER$bones - 1) * 3/2)
 
 ```
 
@@ -88,19 +98,29 @@ library(ggspatial)
 library(viridis)
 
 ggplot()+
-  geom_sf(data = ne_map_ESTER)+
-  geom_sf(data = kw_scores_ESTER, aes(fill = score_bones_new, colour = score_bones_new))+
- coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
-           ylim = st_coordinates(bbox)[c(2,3),2])  + # min & max of y values
-    scale_fill_viridis(option = "turbo")+
-  scale_colour_viridis(option = "turbo") +
-  theme_minimal() +
+  geom_sf(data = ne_map, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
+  geom_sf(data = kw_scores_ESTER, aes(fill = score_bones_new), colour = NA, linewidth = 0)+
+  annotation_scale(location = "bl", width_hint = 0.5) +
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                         pad_x = unit(0.2, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
+           ylim = st_coordinates(bbox)[c(2,3),2]) + # min & max of y values
   labs(fill ="",
        colour ="",
        title = "Bias for preservation of bone, shell etc.",
-       caption = "weighted mean, based on Kibblewhite et al. 2015")
+       caption = "weighted mean, based on Kibblewhite et al. 2015")+
+  scale_fill_viridis_c()+
+  theme(legend.key = element_rect(fill = "white",
+                                  colour = "white",
+                                  linewidth = 0, linetype = "solid"),
+        panel.background = element_rect(fill = "lightblue",
+                                        colour = "lightblue",
+                                        linewidth = 0.5, linetype = "solid")) 
 
-ggsave("./maps/preservation_bones.png", dpi = 300)
+
+
+ggsave("./maps/preservation_bones.png", dpi = 300, width = 20, height = 20, units = "cm")
 ```
 
 ## Metals
@@ -113,20 +133,29 @@ kw_scores_ESTER$metals[kw_scores_ESTER$metals == 0] <- NA
 
 kw_scores_ESTER$score_metals_new <- (-3 + (kw_scores_ESTER$metals - 1) * 3/2)
 
+
 ggplot()+
-  geom_sf(data = ne_map_ESTER)+
-  geom_sf(data = kw_scores_ESTER, aes(fill = score_metals_new, colour = score_metals_new))+
- coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
-           ylim = st_coordinates(bbox)[c(2,3),2])  + # min & max of y values
-    scale_fill_viridis(option = "turbo")+
-  scale_colour_viridis(option = "turbo") +
-  theme_minimal() +
+  geom_sf(data = ne_map, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
+  geom_sf(data = kw_scores_ESTER, aes(fill = score_metals_new), color = NA, linewidth = 0)+
+  annotation_scale(location = "bl", width_hint = 0.5) +
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                         pad_x = unit(0.2, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
+           ylim = st_coordinates(bbox)[c(2,3),2]) + # min & max of y values
   labs(fill ="",
        colour ="",
        title = "Bias for preservation of metals",
-       caption = "weighted mean, based on Kibblewhite et al. 2015")
+       caption = "weighted mean, based on Kibblewhite et al. 2015")+
+  scale_fill_viridis_c()+
+  theme(legend.key = element_rect(fill = "white",
+                                  colour = "white",
+                                  linewidth = 0, linetype = "solid"),
+        panel.background = element_rect(fill = "lightblue",
+                                        colour = "lightblue",
+                                        linewidth = 0.5, linetype = "solid")) 
 
-ggsave("./maps/preservation_metals.png", dpi = 300)
+ggsave("./maps/preservation_metals.png", dpi = 300, width = 20, height = 20, units = "cm")
 ```
 
 ## Metals
