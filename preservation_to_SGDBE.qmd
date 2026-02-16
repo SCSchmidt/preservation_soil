@@ -99,7 +99,7 @@ library(viridis)
 
 ggplot()+
   geom_sf(data = ne_map, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
-  geom_sf(data = kw_scores_ESTER, aes(fill = score_bones_new), colour = NA, linewidth = 0)+
+  geom_sf(data = kw_scores_ESTER, aes(fill = score_bones_new, colour = score_bones_new))+
   annotation_scale(location = "bl", width_hint = 0.5) +
   annotation_north_arrow(location = "tl", which_north = "true", 
                          pad_x = unit(0.2, "in"), pad_y = unit(0.2, "in"),
@@ -110,7 +110,8 @@ ggplot()+
        colour ="",
        title = "Bias for preservation of bone, shell etc.",
        caption = "weighted mean, based on Kibblewhite et al. 2015")+
-  scale_fill_viridis_c()+
+  scale_fill_viridis_c(na.value = NA)+
+  scale_colour_viridis_c(na.value = NA)+
   theme(legend.key = element_rect(fill = "white",
                                   colour = "white",
                                   linewidth = 0, linetype = "solid"),
@@ -136,7 +137,7 @@ kw_scores_ESTER$score_metals_new <- (-3 + (kw_scores_ESTER$metals - 1) * 3/2)
 
 ggplot()+
   geom_sf(data = ne_map, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
-  geom_sf(data = kw_scores_ESTER, aes(fill = score_metals_new), color = NA, linewidth = 0)+
+  geom_sf(data = kw_scores_ESTER, aes(fill = score_metals_new, color = score_metals_new))+
   annotation_scale(location = "bl", width_hint = 0.5) +
   annotation_north_arrow(location = "tl", which_north = "true", 
                          pad_x = unit(0.2, "in"), pad_y = unit(0.2, "in"),
@@ -147,7 +148,8 @@ ggplot()+
        colour ="",
        title = "Bias for preservation of metals",
        caption = "weighted mean, based on Kibblewhite et al. 2015")+
-  scale_fill_viridis_c()+
+  scale_fill_viridis_c(na.value = NA)+
+  scale_colour_viridis_c(na.value = NA)+
   theme(legend.key = element_rect(fill = "white",
                                   colour = "white",
                                   linewidth = 0, linetype = "solid"),
@@ -169,19 +171,28 @@ kw_scores_ESTER$organics[kw_scores_ESTER$organics == 0] <- NA
 kw_scores_ESTER$score_organics_new <- (-3 + (kw_scores_ESTER$organics - 1) * 3/2)
 
 ggplot()+
-  geom_sf(data = ne_map_ESTER)+
-  geom_sf(data = kw_scores_ESTER, aes(fill = score_organics_new, colour = score_organics_new))+
- coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
-           ylim = st_coordinates(bbox)[c(2,3),2])  + # min & max of y values
-    scale_fill_viridis(option = "turbo")+
-  scale_colour_viridis(option = "turbo") +
-  theme_minimal() +
+ geom_sf(data = ne_map, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
+  geom_sf(data = kw_scores_ESTER, aes(fill = score_organics_new, color = score_organics_new))+
+  annotation_scale(location = "bl", width_hint = 0.5) +
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                         pad_x = unit(0.2, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
+           ylim = st_coordinates(bbox)[c(2,3),2]) + # min & max of y values
   labs(fill ="",
        colour ="",
        title = "Bias for preservation of organics",
-       caption = "weighted mean, based on Kibblewhite et al. 2015")
+       caption = "weighted mean, based on Kibblewhite et al. 2015")+
+  scale_fill_viridis_c(na.value = NA)+
+  scale_colour_viridis_c(na.value = NA)+
+  theme(legend.key = element_rect(fill = "white",
+                                  colour = "white",
+                                  linewidth = 0, linetype = "solid"),
+        panel.background = element_rect(fill = "lightblue",
+                                        colour = "lightblue",
+                                        linewidth = 0.5, linetype = "solid")) 
 
-ggsave("./maps/preservation_organics.png", dpi = 300)
+ggsave("./maps/preservation_organics.png", dpi = 300, width = 20, height = 20, units = "cm")
 ```
 
 
