@@ -20,7 +20,7 @@ They write: "SGDBE consists of (1) a geometric dataset at scale 1:1,000,000 and 
 
 <!-- for russia and EURASIA see: https://docs.isric.org/soil-geographic-databases/sections/soil-geographic-databases-asia-eurasia.html#eurasia -->
 
-## 1. already published data has been downloaded
+## 1. already published data (shape file by Kibblewhite et al)
 
 already published for the EU under: Kibblewhite M., Tóth G. and Hermann T. 2015 . "Maps of preservation capacity of cultural artefacts and buried materials in soils in the EU", dataset/maps downloaded from the European Soil Data Centre, esdac.jrc.ec.europa.eu.
 
@@ -33,14 +33,17 @@ ed redox conditions, pH, base saturation, soil organic matter content,
 chloride levels)
 
 ```{r}
+#| label: load data and packages
 
+library(ggplot2)
+library(ggspatial)
+library(viridis)
 library(sf)
+library(dplyr)
+
 
 kw_scores <- read_sf(dsn = "./geodata/SF_cultural/SF_cultural.shp") # percentage, soil ID and preservation scores
-```
 
-
-```{r}
 load("./geodata/ne_map_ESTER.RData")
 
 ne_map <- read_sf(dsn = "./geodata/ne_10m_admin_1_states_provinces.shp") # world background map
@@ -48,28 +51,36 @@ ne_map <- read_sf(dsn = "./geodata/ne_10m_admin_1_states_provinces.shp") # world
 
 
 ```{r}
-library(dplyr)
-
-kw_scores_4326 <- st_transform(kw_scores, crs = 4326)
-
-kw_scores_4326$SOIL_ID[!st_is_valid(kw_scores)] # several units don't seem to be valid
-
-kw_scores_4326 <- kw_scores_4326 |> filter(SOIL_ID > 0)
-
-kw_scores_4326 <- st_make_valid(kw_scores_4326)
+#| label: prepare for mapping
 
 
-bbox <- st_bbox(ne_map_ESTER)
+## set all to the same CRS
+
+# kw_scores_4326 <- st_transform(kw_scores, crs = 4326)
+
+kw_scores_3035 <- st_transform(kw_scores, crs = 3035) ## probably better to use projected data
+
+ne_map_3035 <- st_transform(ne_map, crs = 3035)
+
+kw_scores$SOIL_ID[!st_is_valid(kw_scores)] # several units don't seem to be valid
+
+kw_scores_3035 <- kw_scores_3035 |> filter(SOIL_ID > 0)
+
+ne_map_ESTER_3035 <- st_transform(ne_map_ESTER, crs = 3035) 
+
+bbox <- st_bbox(ne_map_ESTER_3035)
 bbox <- st_as_sfc(bbox)
 
 sf_use_s2(FALSE) # needs to be run once, there's a bug, see https://github.com/r-spatial/sf/issues/1762 
 
-kw_scores_ESTER <- st_intersection(kw_scores_4326, ne_map_ESTER)
+kw_scores_3035 <- st_make_valid(kw_scores_3035) # needs to run after sf_use_s2
+
+kw_scores_ESTER <- st_intersection(kw_scores_3035, ne_map_ESTER_3035)
 
 ```
 
 
-## Bone preservation
+### Bone preservation
 ```{r}
 
 # poor = 1, fair = 2, good = 3
@@ -93,12 +104,10 @@ kw_scores_ESTER$score_bones_new <- (-3 + (kw_scores_ESTER$bones - 1) * 3/2)
 
 
 ```{r}
-library(ggplot2)
-library(ggspatial)
-library(viridis)
+
 
 ggplot()+
-  geom_sf(data = ne_map, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
+  geom_sf(data = ne_map_3035, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
   geom_sf(data = kw_scores_ESTER, aes(fill = score_bones_new, colour = score_bones_new))+
   annotation_scale(location = "bl", width_hint = 0.5) +
   annotation_north_arrow(location = "tl", which_north = "true", 
@@ -124,7 +133,7 @@ ggplot()+
 ggsave("./maps/preservation_bones.png", dpi = 300, width = 20, height = 20, units = "cm")
 ```
 
-## Metals
+### Metals
 
 
 
@@ -136,7 +145,7 @@ kw_scores_ESTER$score_metals_new <- (-3 + (kw_scores_ESTER$metals - 1) * 3/2)
 
 
 ggplot()+
-  geom_sf(data = ne_map, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
+  geom_sf(data = ne_map_3035, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
   geom_sf(data = kw_scores_ESTER, aes(fill = score_metals_new, color = score_metals_new))+
   annotation_scale(location = "bl", width_hint = 0.5) +
   annotation_north_arrow(location = "tl", which_north = "true", 
@@ -160,7 +169,7 @@ ggplot()+
 ggsave("./maps/preservation_metals.png", dpi = 300, width = 20, height = 20, units = "cm")
 ```
 
-## Metals
+### Organics
 
 
 
@@ -171,7 +180,7 @@ kw_scores_ESTER$organics[kw_scores_ESTER$organics == 0] <- NA
 kw_scores_ESTER$score_organics_new <- (-3 + (kw_scores_ESTER$organics - 1) * 3/2)
 
 ggplot()+
- geom_sf(data = ne_map, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
+ geom_sf(data = ne_map_3035, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
   geom_sf(data = kw_scores_ESTER, aes(fill = score_organics_new, color = score_organics_new))+
   annotation_scale(location = "bl", width_hint = 0.5) +
   annotation_north_arrow(location = "tl", which_north = "true", 
@@ -195,15 +204,50 @@ ggplot()+
 ggsave("./maps/preservation_organics.png", dpi = 300, width = 20, height = 20, units = "cm")
 ```
 
+### Stratigraphy preservation
+
+
+```{r}
+
+kw_scores_ESTER$strati[kw_scores_ESTER$strati == 0] <- NA
+
+kw_scores_ESTER$score_strati_new <- (-3 + (kw_scores_ESTER$strati - 1) * 3/2)
+
+
+ggplot()+
+  geom_sf(data = ne_map_3035, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
+  geom_sf(data = kw_scores_ESTER, aes(fill = score_strati_new, color = score_strati_new))+
+  annotation_scale(location = "bl", width_hint = 0.5) +
+#  annotation_north_arrow(location = "tl", which_north = "true", 
+ #                        pad_x = unit(0.2, "in"), pad_y = unit(0.2, "in"),
+  #                       style = north_arrow_fancy_orienteering) +
+  coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
+           ylim = st_coordinates(bbox)[c(2,3),2]) + # min & max of y values
+  labs(fill ="",
+       colour ="",
+       title = "Bias for preservation of stratigraphy",
+       caption = "weighted mean, based on Kibblewhite et al. 2015")+
+  scale_fill_viridis_c(na.value = NA)+
+  scale_colour_viridis_c(na.value = NA)+
+  theme(legend.key = element_rect(fill = "white",
+                                  colour = "white",
+                                  linewidth = 0, linetype = "solid"),
+        panel.background = element_rect(fill = "lightblue",
+                                        colour = "lightblue",
+                                        linewidth = 0.5, linetype = "solid")) 
+
+ggsave("./maps/preservation_stratigraphy.png", dpi = 300, width = 20, height = 20, units = "cm")
+```
 
 
 ... BUT: 
 - missing Switzerland, Russia and other non-EU-areas, that have been mapped in the SGDBE
 
 
-## 2. connect STU to soil preservation scores depending on soil types
+## 2. SGDBE data for Russia: connect STU to soil preservation scores depending on soil types
 
 ```{r}
+#| label: load data
 #install.packages("foreign") to read dbf files
 
 library(foreign)
@@ -212,8 +256,12 @@ dis <- read.dbf("/media/sophie/Data/ESTER_Nextcloud/Daten/EuropeanSoilDatabase/s
 stuorg <- read.dbf("/media/sophie/Data/ESTER_Nextcloud/Daten/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/stuorg.dbf", as.is = F)
 
 smu <- read.dbf("/media/sophie/Data/ESTER_Nextcloud/Daten/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/smu_sgdbe.dbf", as.is = F)
+```
 
 
+```{r}
+#| label: get values for WRBFU classes
+#| 
 wrbfu_values <- unique(dis$WRBFU) # sollte die WRBFU - Klassifizierung sein
 
 library(stringr)
@@ -232,6 +280,8 @@ wrbfu_values_class2 <- tidyr::extract(wrbfu_values_class, wrbfu_values, c("ref_g
 
 
 ```{r}
+#| label: extract European soil classifications from PDF
+
 # The European Soil Databases (ESDB), distribution version v2.0 is freely available to the public after user registration. Please note that the spatial data are in vector format.
 ##  year 2004 -> documentation 
 
@@ -300,15 +350,12 @@ all_groups$match <- tolower(all_groups$name)
 ```
 
 ```{r}
+#| label: match with Kibblewhite system
 
 load("./data/appendix_kibblewhite_etal_2015_A+B.RData")
 
 appendix$match <- tolower(appendix$`Name in WRB 1998`)
-## but WRB 1998 seems to be a better match for soils in SGDBE
-
-```
-
-```{r}
+## WRB 1998 seems to be a better match for soils in SGDBE
 
 match <- left_join(appendix, all_groups)
 
@@ -322,7 +369,9 @@ save(match, file = "./data/soil_WRB_classification_preservation_scores_1998.RDat
 ```
 
 ```{r}
-## fill in missing values in "short" by hand and use 1998 classification -> seems to be more differentiated?
+#| label: data cleaning
+
+## fill in missing values in "short" by hand and use 1998 classification -> seems to be more differentiated and results in more matches
 
 match_filled <- match |>
   mutate(short = case_when(
@@ -347,18 +396,16 @@ match_filled <- match_filled |>
 
 save(match_filled, file = "./data/soil_WRB_classification_preservation_scores.RData")
 
-## possibly Kibblewhite et al actually used WRB 1998 ?
-
-
-
 ```
 
 
-## next step would be to map the STUs to SMU 
+## map the STUs to SMU 
 
 4.  add Kibblewhite infos to STU 
 
 ```{r}
+#| label: load data STU and SMU and kibblewhite scores matched with WRB classes
+ 
 load("./data/soil_WRB_classification_preservation_scores.RData")
 
 library(sf)
@@ -369,10 +416,13 @@ stu_sgdbe <- read_sf(dsn = "./geodata/EuropeanSoilDatabase/soilDB_shapefiles_and
 country <- read_sf(dsn = "./geodata/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/country.shp")
 
 sgdbe4_0 <- read_sf(dsn = "./geodata/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/sgdbe4_0.shp") # DOM STU and its percentage per SMU
+
+stu_kw <- left_join(stu_sgdbe, match_filled, by = c("WRBFU" = "short"))
+
 ```
 
 ```{r}
-## check for missing information
+#| label: check for missing information
 
 list_WRBFU_stu <- unique(stu_sgdbe$WRBFU)
 list_WRBFU_kw <- unique(match_filled$short)
@@ -382,8 +432,169 @@ missing_wrb_in_kw <- list_WRBFU_stu[!(list_WRBFU_stu %in% list_WRBFU_kw)] # 38 m
 missing_wrb_in_stu <- list_WRBFU_stu[!(list_WRBFU_kw %in% list_WRBFU_stu)] # only 8, also not as important
 ```
 
+There are 38 soil types in the WRBFU classification of the SGDBE that don't match with any Kibblewhite group. 
+
+Following the assumption that if all subtypes of a reference group share one preservation score in the Kibblewhite et al dataset, other subtypes would follow the same pattern, their scores are assigned to the subtypes missing in the Kibblewhite et al data.
+
+
 ```{r}
-stu_kw <- left_join(stu_sgdbe, match_filled, by = c("WRBFU" = "short"))
+#| label: match the missing classes with other scores of ref group
+
+## "ANth"     "CMhu"     "CRca"     "LPum"     "ABeun"    "CRum"  
+## "CMge"     "CHgs"     "CHch"     "GLcc"     "GLso"     "CRgl"     "CRhi"     "FLum"     "HScy"     "HSsz"     "PZhi"     "CRcc"    
+## "CRha"     "CRtu"     "CRoa"     "CRye"     "ANao"     "ANhi"     "CRan"     "LPmo"     "PLlv"     "PLgl"     "PLmo"     "PLab"    
+## "CLha"     "CLszn"    "RGge"     "VRgl"     "SC"      
+
+soil_groups <- match_filled |> select(X1.x, X2.x, X1.y, X2.y, name) |> unique()
+colnames(soil_groups) <- c("ref_gr", "ref_group_short", "sub_gr", "sub_group_short", "name")
+
+
+library(tidyr)
+
+stu_kw$WRBFU[stu_kw$WRBFU %in% c("1 1 1" ,"2 2 22 2", "3 3 33 3", "4 4 44 4" ,"5 5 55 5" ,"6 6 66 6")]  <- NA
+
+stu_kw <- stu_kw |>
+  separate_wider_position(cols = WRBFU, c(ref_group_short = 2, sub_group_short = 2 ), 
+                          too_few = "align_start",
+                          too_many = "debug",
+                          cols_remove = F)
+  
+stu_kw <- left_join(stu_kw, soil_groups)
+
+# check for bones: 
+
+ref_group_bones <- table(match_filled$X2.x, match_filled$`Bones etc.`)
+
+stu_kw <- stu_kw |>
+  mutate(`Bones etc.` = case_when(
+    is.na(`Bones etc.`) & ref_group_short == "AB" ~ "Poor",
+    is.na(`Bones etc.`) & ref_group_short == "AC" ~ "Poor",
+    is.na(`Bones etc.`) & ref_group_short == "AL" ~ "Poor",
+    is.na(`Bones etc.`) & ref_group_short == "AN" ~ "Poor",
+    is.na(`Bones etc.`) & ref_group_short == "AR" ~ "Poor",
+    is.na(`Bones etc.`) & ref_group_short == "AT" ~ "Poor",
+    is.na(`Bones etc.`) & ref_group_short == "CL" ~ "Good",
+    is.na(`Bones etc.`) & ref_group_short == "CH" ~ "Fair",
+    is.na(`Bones etc.`) & ref_group_short == "GY" ~ "Good",
+    is.na(`Bones etc.`) & ref_group_short == "KS" ~ "Fair",
+    is.na(`Bones etc.`) & ref_group_short == "PH" ~ "Fair",
+    is.na(`Bones etc.`) & ref_group_short == "PZ" ~ "Poor",
+    is.na(`Bones etc.`) & ref_group_short == "SC" ~ "Poor",
+    is.na(`Bones etc.`) & ref_group_short == "SN" ~ "Poor",
+    is.na(`Bones etc.`) & ref_group_short == "UM" ~ "Poor",
+    is.na(`Bones etc.`) & ref_group_short == "VR" ~ "Poor",
+    TRUE ~ `Bones etc.`
+  ))
+
+stu_kw_b_na <- stu_kw |> filter(is.na(`Bones etc.`)) |> select(WRBFU) |> unique()
+stu_kw_b_na$WRBFU
+
+# check for metals: 
+
+ref_group_metals <- table(match_filled$X2.x, match_filled$Metals)
+
+stu_kw <- stu_kw |>
+  mutate(Metals = case_when(
+    is.na(Metals) & ref_group_short == "AB" ~ "Poor",
+    is.na(Metals) & ref_group_short == "AC" ~ "Poor",
+    is.na(Metals) & ref_group_short == "AL" ~ "Poor",
+    is.na(Metals) & ref_group_short == "AN" ~ "Poor",
+    is.na(Metals) & ref_group_short == "AR" ~ "Poor",
+    is.na(Metals) & ref_group_short == "AT" ~ "Poor",
+    is.na(Metals) & ref_group_short == "CL" ~ "Good",
+    is.na(Metals) & ref_group_short == "FL" ~ "Poor",
+    is.na(Metals) & ref_group_short == "CH" ~ "Fair",
+    is.na(Metals) & ref_group_short == "GY" ~ "Good",
+    is.na(Metals) & ref_group_short == "KS" ~ "Fair",
+    is.na(Metals) & ref_group_short == "PZ" ~ "Poor",
+    is.na(Metals) & ref_group_short == "RG" ~ "Poor",
+    is.na(Metals) & ref_group_short == "SC" ~ "Poor",
+    is.na(Metals) & ref_group_short == "SN" ~ "Poor",
+    is.na(Metals) & ref_group_short == "UM" ~ "Poor",
+    is.na(Metals) & ref_group_short == "VR" ~ "Poor",
+    TRUE ~ Metals
+  ))
+
+stu_kw_m_na <- stu_kw |> filter(is.na(Metals)) |> select(WRBFU) |> unique()
+stu_kw_m_na$WRBFU
+
+
+# check for organics: 
+
+ref_group_organics <- table(match_filled$X2.x, match_filled$Organics)
+
+stu_kw <- stu_kw |>
+  mutate(Organics = case_when(
+    is.na(Organics) & ref_group_short == "AB" ~ "Fair",
+    is.na(Organics) & ref_group_short == "AC" ~ "Poor",
+    is.na(Organics) & ref_group_short == "AL" ~ "Poor",
+    is.na(Organics) & ref_group_short == "AN" ~ "Poor",
+    is.na(Organics) & ref_group_short == "AR" ~ "Fair",
+    is.na(Organics) & ref_group_short == "AT" ~ "Fair",
+    is.na(Organics) & ref_group_short == "CH" ~ "Fair",
+    is.na(Organics) & ref_group_short == "CL" ~ "Good",
+    is.na(Organics) & ref_group_short == "GY" ~ "Good",
+    is.na(Organics) & ref_group_short == "HS" ~ "Good",
+    is.na(Organics) & ref_group_short == "KS" ~ "Fair",
+    is.na(Organics) & ref_group_short == "PH" ~ "Fair",
+    is.na(Organics) & ref_group_short == "PL" ~ "Fair",
+    is.na(Organics) & ref_group_short == "SC" ~ "Poor",
+    is.na(Organics) & ref_group_short == "SN" ~ "Poor",
+    is.na(Organics) & ref_group_short == "VR" ~ "Poor",
+    TRUE ~ Organics
+  ))
+
+stu_kw_o_na <- stu_kw |> filter(is.na(Organics)) |> select(WRBFU) |> unique()
+stu_kw_o_na$WRBFU
+
+# check for stratigraphy: 
+
+ref_group_stratigraphy <- table(match_filled$X2.x, match_filled$Stratigraphy)
+
+stu_kw <- stu_kw |>
+  mutate(Stratigraphy = case_when(
+    is.na(Stratigraphy) & ref_group_short == "AB" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "AC" ~ "Poor",
+    is.na(Stratigraphy) & ref_group_short == "AL" ~ "Poor",
+    is.na(Stratigraphy) & ref_group_short == "AN" ~ "Poor",
+    is.na(Stratigraphy) & ref_group_short == "AR" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "AT" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "CH" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "CL" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "FL" ~ "Good",
+    is.na(Stratigraphy) & ref_group_short == "GL" ~ "Good",
+    is.na(Stratigraphy) & ref_group_short == "GY" ~ "Good",
+    is.na(Stratigraphy) & ref_group_short == "HS" ~ "Good",
+    is.na(Stratigraphy) & ref_group_short == "KS" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "LP" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "PH" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "PL" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "PZ" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "RG" ~ "Poor",
+    is.na(Stratigraphy) & ref_group_short == "SC" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "SN" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "UM" ~ "Fair",
+    is.na(Stratigraphy) & ref_group_short == "VR" ~ "Poor",
+    TRUE ~ Stratigraphy
+  ))
+
+# check for NAs
+
+stu_kw_s_na <- stu_kw |> filter(is.na(Stratigraphy)) |> select(WRBFU) |> unique()
+stu_kw_s_na$WRBFU
+```
+
+Completely missing is the group of Cryosols (CR), which are soils influenced by ice / frost (as described by Kibblewhite et al, they were removed from the dataset).
+
+In case of organics, the following reference groups where **not** used to inform missing values, as there were differences in the subgroups (`unique(stu_kw_o_na$WRBFU)`): CM, LP, GL, FL, PZ, RG
+
+In case of metals, the following reference groups where **not** used to inform missing values, as there were differences in the subgroups (`unique(stu_kw_m_na$WRBFU)`): CM, LP, GL, HS, LP, PL
+
+In case of bones, the following reference groups where **not** used to inform missing values, as there were differences in the subgroups (`unique(stu_kw_b_na$WRBFU)`): CM, LP, GL, FL, HS, LP, PL, RG
+
+In case of stratigraphy, the following reference groups where **not** used to inform missing values, as there were differences in the subgroups (`unique(stu_kw_s_na$WRBFU)`): CM
+
+```{r}
 
 ## scores by Kibblewhite et al so far only character, needs to be factor:
 
@@ -413,23 +624,34 @@ stu_smu <- left_join(stuorg, stu_kw, by = "STU")
 
 stu_smu_b <- stu_smu |>
   group_by(SMU) |>
-  mutate(score_bones = 
-           sum(PCAREA * as.numeric(`Bones etc.`) / 100)) |>
-  select(SMU, score_bones) |>
+  mutate(score_bones =  sum(PCAREA * as.numeric(`Bones etc.`) / 100),
+         score_metals =  sum(PCAREA * as.numeric(Metals) / 100),
+         score_organics = sum(PCAREA * as.numeric(Organics) / 100),
+         score_strati = sum(PCAREA * as.numeric(Stratigraphy) / 100))|>
+  select(SMU, contains("score")) |>
   unique()
 
 smu_map <- left_join(sgdbe4_0, stu_smu_b)
 
-smu_map$score_bones <- as.numeric(smu_map$score_bones ) 
+#smu_map$score_bones <- as.numeric(smu_map$score_bones ) #nötig??
+#smu_map$score_metals <- as.numeric(smu_map$score_metals ) 
+#smu_map$score_organics <- as.numeric(smu_map$score_organics ) 
+#smu_map$score_strati <- as.numeric(smu_map$score_strati ) 
 
 ## scale to our system from 0 (no bias = good) to -3
 ### first scale to 0 to 3 and add minus after
 
 # formula is y = new min + (x - old min)(new max - new min) / (old max - old min)
-# new min is 0 , new max is 3, old min is 1, old max is 3
-## ergo: y = (x-1) (3-0)/(3-1) = (x-1)*3/2
 
-smu_map$score_bones_new <- -((smu_map$score_bones-1)*3/2)
+
+## other version:
+# new min is -3 , new max is 0, old min is 1, old max is 3
+## ergo: y = -3 + (x-1)*(0- (-3))/(3-1) = -3 + (x-1)*3/2
+
+smu_map$score_bones_new <- -3 + ((smu_map$score_bones-1)*3/2)
+smu_map$score_metals_new <- -3 + ((smu_map$score_metals-1)*3/2)
+smu_map$score_organics_new <- -3 + ((smu_map$score_organics-1)*3/2)
+smu_map$score_strati_new <- -3 +((smu_map$score_strati-1)*3/2) 
 
 ```
 
@@ -438,15 +660,79 @@ library(ggplot2)
 library(ggspatial)
 
 ggplot()+
+  geom_sf(data = ne_map_3035, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
   geom_sf(data = smu_map, aes(fill = score_bones_new, colour = score_bones_new))+
- # coord_sf(xlim = c(-10, 40), ylim = c(35, 65)) +
-#  scale_fill_brewer(palette = "YlGnBu") +
-  theme_minimal() +
-  guides(fill = guide_legend(title = ""),
-         colour = guide_legend(title = "") )+
-  theme(legend.position.inside = c(0.9, 0.9), 
-        plot.background = element_rect(fill = "white", color = NA))
+  annotation_scale(location = "bl", width_hint = 0.5) +
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                         pad_x = unit(0.2, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
+           ylim = st_coordinates(bbox)[c(2,3),2]) + # min & max of y values
+  labs(fill ="",
+       colour ="",
+       title = "Bias for preservation of bone, shell etc.",
+       caption = "weighted mean, based on Kibblewhite et al. 2015")+
+  scale_fill_viridis_c(na.value = NA)+
+  scale_colour_viridis_c(na.value = NA)+
+  theme(legend.key = element_rect(fill = "white",
+                                  colour = "white",
+                                  linewidth = 0, linetype = "solid"),
+        panel.background = element_rect(fill = "lightblue",
+                                        colour = "lightblue",
+                                        linewidth = 0.5, linetype = "solid")) 
+
+ggsave("./maps/preservation_bones_own_calc.png",  dpi = 300, width = 20, height = 20, units = "cm")
 ```
+
+## check differences to maps provided by Kibblewhite
+
+```{r}
+#| label: join both datasets
+# join the dataframes
+
+## 1. cut smu map to bbox of ESTER and transform dataset to INSPIRE system: https://epsg.io/3035
+#smu_map_3035 <- st_transform(smu_map, crs = 3035)
+
+### for checking with old scores
+smu_map_3035 <- left_join(sgdbe4_0, stu_smu_b)
+smu_map_3035 <- st_transform(smu_map_3035, crs = 3035)
+
+sf_use_s2(FALSE) # needs to be run once, there's a bug, see https://github.com/r-spatial/sf/issues/1762 
+
+smu_map_3035 <- st_make_valid(smu_map_3035) # needs to run after sf_use_s2
+
+smu_map_3035 <- smu_map_3035 |> filter(SOIL_ID > 0)
+
+smu_map_ESTER <- st_intersection(smu_map_3035, ne_map_ESTER_3035)
+
+comparison <- st_join(smu_map_ESTER, kw_scores_ESTER)
+
+comparison |>
+ggplot()+
+    geom_point(aes(x = bones, y = score_bones ))
+
+
+```
+
+
+```{r}
+## cut a few columns to make it easier to handle
+
+smu_map_ESTER_b <- smu_map_ESTER |> select(SOIL_ID, contains("score"))
+
+kw_scores_ESTER_b <- kw_scores_ESTER |> select(SOIL_ID, bones, metals, organics, strati, iso_a2, iso_3166_2, iso_3166_c, contains("score"))
+
+kw_scores_ESTER_b <- st_transform(kw_scores_ESTER_b, crs = 3035) # vmtl nicht mehr nötig?
+
+comparison <- st_join(smu_map_ESTER_b, kw_scores_ESTER_b)
+
+comparison$bones_comp <- comparison$score_bones_new.x - comparison$score_bones_new.y
+summary(comparison$bones_comp)
+
+
+
+```
+
 
 ...
 
