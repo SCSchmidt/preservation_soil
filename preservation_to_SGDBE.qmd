@@ -8,6 +8,9 @@ Here we follow Kibblewhite et al 2015 and redo their steps to connect their soil
 They write: "SGDBE consists of (1) a geometric dataset at scale 1:1,000,000 and (2) a semantic dataset containing attribute files. The geometrical component of the database are polygons that form soil mapping units (SMUs) (EC, 2003). SMUs contain one or more STUs that form a discrete landscape unit with shared characteristics. The semantic dataset of the SGDBE describe the soil types present within the SMU and the percentage of the SMU area occupied by each STU present within it. Thus multiple attribute values are linked to the polygons of the geometrical dataset. *We assigned the appropriate preservation numeric score to each STU in each SMU and calculated the spatially weighted mean of these scores for each SMU*. Areas of artificial surfaces, permanent ice or snow cover and water bodies were excluded from the analysis. We then mapped the mean scores for the SMUs across the European Union after assigning colours to a continuous scale of mean preservation score. The percentage areas of soil across the European Union that provide good (highest third of scale), fair and poor (lowest third of scale) preservation capacities for bones, teeth and shells; organic materials; and metals (Cu, bronze and Fe) were then calculated. "
 
 -\> therefore we will 
+
+0. get the already published data (shp by Kibblewhite et al)
+
 1. get the STUs downloaded from SGDBE 
 2. connect STU to soil preservation scores depending on soil types 
 3. save file 
@@ -20,7 +23,7 @@ They write: "SGDBE consists of (1) a geometric dataset at scale 1:1,000,000 and 
 
 <!-- for russia and EURASIA see: https://docs.isric.org/soil-geographic-databases/sections/soil-geographic-databases-asia-eurasia.html#eurasia -->
 
-## 1. already published data (shape file by Kibblewhite et al)
+## 0. already published data (shape file by Kibblewhite et al)
 
 already published for the EU under: Kibblewhite M., Tóth G. and Hermann T. 2015 . "Maps of preservation capacity of cultural artefacts and buried materials in soils in the EU", dataset/maps downloaded from the European Soil Data Centre, esdac.jrc.ec.europa.eu.
 
@@ -89,6 +92,7 @@ kw_scores_ESTER <- st_intersection(kw_scores_3035, ne_map_ESTER_3035)
 ### first scale to 0 to 3 and add minus after
 
 # formula is y = new min + (x - old min)(new max - new min) / (old max - old min)
+
 # new max is 0 , new min is -3, old min is 1, old max is 3
 
 #y = -3 + (x - 1)(0 - (-3) / (3 - 1)
@@ -97,7 +101,35 @@ kw_scores_ESTER <- st_intersection(kw_scores_3035, ne_map_ESTER_3035)
 
 kw_scores_ESTER$bones[kw_scores_ESTER$bones == 0] <- NA
 
-kw_scores_ESTER$score_bones_new <- (-3 + (kw_scores_ESTER$bones - 1) * 3/2)
+kw_scores_ESTER$score_bones_new <- (-3 + (kw_scores_ESTER$bones - 1) * 3/2) 
+
+## check: linearer zusammenhang, haut hin:
+ggplot()+
+  geom_point(data = kw_scores_ESTER, aes(x = bones, y = score_bones_new))
+
+
+ggplot()+
+  geom_sf(data = ne_map_3035, colour = "grey", fill = "white", size = 0.5, alpha = 0.5) + # world background
+  geom_sf(data = kw_scores, aes(fill = bones, colour = bones))+
+  annotation_scale(location = "bl", width_hint = 0.5) +
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                         pad_x = unit(0.2, "in"), pad_y = unit(0.2, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  coord_sf(xlim = st_coordinates(bbox)[c(1,2),1], # min & max of x values
+           ylim = st_coordinates(bbox)[c(2,3),2]) + # min & max of y values
+  labs(fill ="",
+       colour ="",
+       title = "Bias for preservation of bone, shell etc.",
+       caption = "weighted mean, based on Kibblewhite et al. 2015")+
+  scale_fill_viridis_c(na.value = NA)+
+  scale_colour_viridis_c(na.value = NA)+
+  theme(legend.key = element_rect(fill = "white",
+                                  colour = "white",
+                                  linewidth = 0, linetype = "solid"),
+        panel.background = element_rect(fill = "lightblue",
+                                        colour = "lightblue",
+                                        linewidth = 0.5, linetype = "solid")) 
+
 
 ```
 
@@ -251,6 +283,7 @@ ggsave("./maps/preservation_stratigraphy.png", dpi = 300, width = 20, height = 2
 #install.packages("foreign") to read dbf files
 
 library(foreign)
+
 dis <- read.dbf("/media/sophie/Data/ESTER_Nextcloud/Daten/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/stu_sgdbe.dbf", as.is = F)
 
 stuorg <- read.dbf("/media/sophie/Data/ESTER_Nextcloud/Daten/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/stuorg.dbf", as.is = F)
@@ -262,6 +295,7 @@ smu <- read.dbf("/media/sophie/Data/ESTER_Nextcloud/Daten/EuropeanSoilDatabase/s
 ```{r}
 #| label: get values for WRBFU classes
 #| 
+
 wrbfu_values <- unique(dis$WRBFU) # sollte die WRBFU - Klassifizierung sein
 
 library(stringr)
@@ -416,6 +450,8 @@ stu_sgdbe <- read_sf(dsn = "./geodata/EuropeanSoilDatabase/soilDB_shapefiles_and
 country <- read_sf(dsn = "./geodata/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/country.shp")
 
 sgdbe4_0 <- read_sf(dsn = "./geodata/EuropeanSoilDatabase/soilDB_shapefiles_and_attributes/sgdbe4_0.shp") # DOM STU and its percentage per SMU
+
+sgdbe4_0 <- st_transform(sgdbe4_0, crs = 3035)
 
 stu_kw <- left_join(stu_sgdbe, match_filled, by = c("WRBFU" = "short"))
 
@@ -597,19 +633,20 @@ In case of stratigraphy, the following reference groups where **not** used to in
 ```{r}
 
 ## scores by Kibblewhite et al so far only character, needs to be factor:
+## "Numeric values were assigned to each preservation category (poor = 1, fair = 2, good = 3)"
 
 stu_kw$`Bones etc.` <- factor(stu_kw$`Bones etc.`, ordered = T,
-                              levels = c("Good", "Fair", "Poor"))
+                              levels = c("Poor", "Fair", "Good"))
 
 
 stu_kw$Organics <- factor(stu_kw$Organics, ordered = T,
-                              levels = c("Good", "Fair", "Poor"))
+                              levels = c("Poor", "Fair", "Good"))
 
 stu_kw$Metals <- factor(stu_kw$Metals, ordered = T,
-                              levels = c("Good", "Fair", "Poor"))
+                              levels = c("Poor", "Fair", "Good"))
 
 stu_kw$Stratigraphy <- factor(stu_kw$Stratigraphy, ordered = T,
-                              levels = c("Good", "Fair", "Poor"))
+                              levels = c("Poor", "Fair", "Good"))
 
 save(stu_kw, file = "./data/STU_preservation_scores.RData")
 
@@ -617,26 +654,17 @@ save(stu_kw, file = "./data/STU_preservation_scores.RData")
 
 5. to SMU via percentage of soil type (weighted mean) ... or connect SMU to match via soil type?
 
+Following Kibblewhite et al 2015, 253: " We assigned the appropriate preservation numeric score to
+each STU in each SMU and calculated the spatially weighted mean of these scores for each SMU. Areas of artificial surfaces, permanent ice or snow cover and water bodies were excluded from the analysis."
+
+- artificial surfaces, permanent ice/snow and water bodies will probably not affect the results too heavily, disregarded.
+
 ```{r}
+
+load(file = "./data/STU_preservation_scores.RData")
 
 stu_smu <- left_join(stuorg, stu_kw, by = "STU")
 
-
-stu_smu_b <- stu_smu |>
-  group_by(SMU) |>
-  mutate(score_bones =  sum(PCAREA * as.numeric(`Bones etc.`) / 100),
-         score_metals =  sum(PCAREA * as.numeric(Metals) / 100),
-         score_organics = sum(PCAREA * as.numeric(Organics) / 100),
-         score_strati = sum(PCAREA * as.numeric(Stratigraphy) / 100))|>
-  select(SMU, contains("score")) |>
-  unique()
-
-smu_map <- left_join(sgdbe4_0, stu_smu_b)
-
-#smu_map$score_bones <- as.numeric(smu_map$score_bones ) #nötig??
-#smu_map$score_metals <- as.numeric(smu_map$score_metals ) 
-#smu_map$score_organics <- as.numeric(smu_map$score_organics ) 
-#smu_map$score_strati <- as.numeric(smu_map$score_strati ) 
 
 ## scale to our system from 0 (no bias = good) to -3
 ### first scale to 0 to 3 and add minus after
@@ -648,12 +676,68 @@ smu_map <- left_join(sgdbe4_0, stu_smu_b)
 # new min is -3 , new max is 0, old min is 1, old max is 3
 ## ergo: y = -3 + (x-1)*(0- (-3))/(3-1) = -3 + (x-1)*3/2
 
-smu_map$score_bones_new <- -3 + ((smu_map$score_bones-1)*3/2)
-smu_map$score_metals_new <- -3 + ((smu_map$score_metals-1)*3/2)
-smu_map$score_organics_new <- -3 + ((smu_map$score_organics-1)*3/2)
-smu_map$score_strati_new <- -3 +((smu_map$score_strati-1)*3/2) 
+stu_smu$score_bones <- -3 + ((as.numeric(stu_smu$`Bones etc.`)-1)*3/2)
+stu_smu$score_metals <- -3 + ((as.numeric(stu_smu$Metals)-1)*3/2)
+stu_smu$score_organics <- -3 +((as.numeric(stu_smu$Organics)-1)*3/2)
+stu_smu$score_strati <- -3 +((as.numeric(stu_smu$Stratigraphy)-1)*3/2) 
+
+## calculate weighted mean -> leads to different values than Kibblewhite ... or the join to KW data doesn't work
+
+stu_smu_b <- stu_smu |>
+  group_by(SMU) |>
+  mutate(score_bones_new = sum(PCAREA * score_bones / 100),
+         score_metals_new =  sum(PCAREA * score_metals / 100),
+         score_organics_new = sum(PCAREA * score_organics / 100),
+         score_strati_new = sum(PCAREA * score_strati / 100))|>
+  select(SMU, contains("score")) |>
+  unique() |>
+  ungroup()
+
+sgdbe4_0_mapping <- sgdbe4_0 |>
+  group_by(SMU) |>
+  summarize(
+    geometry = sf::st_union(geometry), # or SHAPE in case of data loaded from GDB
+    across(everything(), first),
+    .groups = "drop"
+  ) |>
+  ungroup()
+
+sgdbe4_0_mapping2 <- sgdbe4_0_mapping |> select(SMU, geometry, SOIL_ID) |> unique()
+
+smu_map <- left_join(sgdbe4_0_mapping2, stu_smu_b, by = "SMU") # maybe sgdbe4_0 andere version als smu?
+## many to many relations?
+
+## maybe better join via STU ?? 
+
+smu_kw_join <- st_join(smu_map, kw_scores_3035) 
+
+ggplot(smu_kw_join)+
+  geom_point(aes(score_bones_new, bones))
 
 ```
+
+### Troubleshooting
+Problem: the new scores (our bias system) from Kibblewhites shp do not match the scores I calculated by joining the reference groups in the STUs to the SMUs by percentage of area
+
+--> first check, whether the scores are the same within Kibblewhite system on stu level
+--> then check whether maybe Kibblewhite did the join of ref group with SMU not via STU
+
+```{r}
+
+kw_scores_3035$
+
+
+```
+
+
+
+
+
+
+
+
+
+
 
 ```{r}
 library(ggplot2)
